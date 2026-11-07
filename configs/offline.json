@@ -1,0 +1,188 @@
+{
+  "scene": {
+    "path": "scenes/point_cloud.ply",
+    "world_scale": 1.0,
+    "max_gaussians": 2000000,
+    "max_file_bytes": 600000000,
+    "max_invalid_fraction": 0
+  },
+  "camera": {
+    "initial_pose_index": null,
+    "width": 800,
+    "height": 600,
+    "world_up": [
+      0,
+      -1,
+      0
+    ],
+    "start": [
+      0,
+      0,
+      0
+    ],
+    "fov_degrees": 75,
+    "direction": [
+      0,
+      0,
+      1
+    ]
+  },
+  "renderer": {
+    "backend": "gsplat",
+    "device": "cuda:0",
+    "near": 0.02,
+    "far": 60,
+    "max_batch": 2,
+    "max_pixels": 1500000
+  },
+  "navigation": {
+    "backend": "occupancy_astar_3d",
+    "bounds": [
+      [
+        -3,
+        -1.5,
+        -3
+      ],
+      [
+        3,
+        1.5,
+        3
+      ]
+    ],
+    "voxel_size": 0.16,
+    "camera_radius": 0.08,
+    "margin": 0.04,
+    "gaussian_sigma": 2,
+    "opacity_threshold": 0.02,
+    "move_step": 0.12,
+    "max_cells": 1000000,
+    "max_expansions": 300000
+  },
+  "vlm": {
+    "mode": "local",
+    "device": "cuda:0",
+    "model_path": "models/Qwen3-VL-8B-Instruct",
+    "max_new_tokens": 512,
+    "dtype": "bfloat16",
+    "quantization": "none",
+    "max_image_pixels": 1048576,
+    "review_input": "focus_crop"
+  },
+  "target": {
+    "description": "chair",
+    "category": "chair",
+    "require_full_description": false
+  },
+  "association": {
+    "confirmation_views": 2,
+    "min_baseline": 0.3,
+    "min_feature_inliers": 10,
+    "min_parallax_degrees": 0.7,
+    "ratio_test": 0.7,
+    "min_feature_box_fraction": 0.08,
+    "box_border_margin": 4,
+    "max_box_area_fraction": 0.75,
+    "min_box_side": 16
+  },
+  "policy": {
+    "seed": 7,
+    "position_samples": 6,
+    "yaw_samples": 6,
+    "coverage_samples": 100,
+    "plan_top_k": 4,
+    "geometric_view_range": 7,
+    "effective_view_range": 3,
+    "coverage_object_size": 0.12,
+    "min_object_pixels": 12,
+    "verify_baseline": 0.5,
+    "free_coverage_samples": 160,
+    "pitch_degrees": [
+      0,
+      -20
+    ],
+    "exploration_height_band": 0.24,
+    "min_explore_translation": 1.5,
+    "spatial_novelty_scale": 2,
+    "strategy": "grid128",
+    "grid128": {
+      "position_order": "serpentine"
+    }
+  },
+  "search": {
+    "max_observations": 128,
+    "max_path_length": 120,
+    "max_seconds": 1200,
+    "observe_every_distance": 0.6,
+    "max_verify_attempts": 2,
+    "max_consecutive_verify_observations": 3,
+    "min_explore_progress": 1.5,
+    "candidate_max_age": 3,
+    "candidate_max_anchor_distance": 1.5,
+    "mode": "coverage_first",
+    "max_verification_observations": 24
+  },
+  "output_root": "runs",
+  "visualization": {
+    "enabled": false
+  },
+  "offline": {
+    "render_batch": 2,
+    "max_vlm_candidates": 256,
+    "max_seconds": 1800,
+    "max_disk_mb": 2048,
+    "validate_positions": true,
+    "export_scene_html": true,
+    "max_scene_plot_points": 30000
+  },
+  "segmentation": {
+    "checkpoint": "models/sam2.1_hiera_base_plus.pt",
+    "model_config": "configs/sam2.1/sam2.1_hiera_b+.yaml",
+    "device": "cuda:0"
+  },
+  "localization": {
+    "mode": "rendered_depth_after_vlm",
+    "min_alpha": 0.6,
+    "min_points": 30,
+    "max_points": 20000,
+    "max_mask_fraction": 0.5,
+    "mask_erode": 1,
+    "min_depth_band": 0.05,
+    "relative_depth_band": 0.15,
+    "near": 0.02,
+    "far": 60
+  },
+  "gaussian_projection": {
+    "enabled": true,
+    "depth_abs": 0.04,
+    "depth_rel": 0.01,
+    "min_alpha": 0.6,
+    "min_opacity": 0.02,
+    "chunk_size": 200000,
+    "min_views": 1,
+    "max_export_bytes": 1000000000,
+    "highlight_rgb": [
+      1,
+      0.05,
+      0.05
+    ]
+  },
+  "grounding": {
+    "max_candidates_per_image": 12,
+    "max_calls": 256,
+    "invalid_retries": 1
+  },
+  "auto_views": {
+    "mode": "auto",
+    "scale_distances": true,
+    "height_fractions": [
+      0.45,
+      0.35,
+      0.55,
+      0.65
+    ],
+    "max_candidates": 4096,
+    "min_component_sites": 8,
+    "min_spacing_voxels": 2,
+    "max_ray_steps": 512
+  }
+}

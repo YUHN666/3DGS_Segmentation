@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3DGS 搜索 · 实时与回放</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1120;--panel:#141f32;--line:#29354b;--muted:#9baec8;--accent:#67e8f9}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#e6edf7;font:15px/1.55 system-ui,sans-serif}
+header{padding:22px 30px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:20px}
+h1{font-size:24px;margin:0 0 4px}p{margin:0;color:var(--muted)}#badge{padding:7px 14px;border-radius:30px;background:#1b3743;color:var(--accent);white-space:nowrap}
+main{max-width:1540px;margin:auto;padding:24px;display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);gap:20px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}.title{padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
+.stage{min-height:240px;position:relative;background:#050912;display:flex;align-items:center;justify-content:center}canvas{display:block;max-width:100%;height:auto}#rgb{width:100%}#empty{position:absolute;text-align:center;padding:20px;color:var(--muted)}
+.controls{padding:16px 18px}button,select{border:1px solid #42516a;background:#1a2b43;color:#eef8ff;border-radius:7px;padding:8px 13px;font:inherit;cursor:pointer}button:hover{border-color:var(--accent)}button:disabled{opacity:.4;cursor:default}
+.row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.time{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--muted)}input[type=range]{width:100%;accent-color:var(--accent);margin:18px 0 8px;cursor:pointer}label{color:var(--muted);cursor:pointer}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border-top:1px solid var(--line)}.stat{padding:12px 16px;background:var(--panel)}.stat strong{display:block;font-size:22px}.stat span{font-size:12px;color:var(--muted)}
+aside{display:flex;flex-direction:column;gap:18px}.mapwrap{padding:12px}#map{width:100%;height:300px}.note{padding:0 16px 14px;font-size:12px;color:var(--muted)}#phase{color:var(--accent)}#events{margin:0;max-height:210px;overflow:auto;padding:12px 18px;list-style:none;font:12px/1.8 ui-monospace,monospace;color:var(--muted)}
+footer{padding:0 24px 24px;text-align:center;color:var(--muted);font-size:12px}a{color:var(--accent)}.links{display:flex;gap:16px;padding:14px 18px;border-top:1px solid var(--line)}#pose{font:12px/1.7 ui-monospace,monospace;padding:12px 18px;color:var(--muted);overflow-wrap:anywhere}
+@media(max-width:900px){main{grid-template-columns:1fr;padding:12px}header{padding:18px}h1{font-size:20px}#map{height:240px}}
+</style>
+<header><div><h1>3DGS 相机搜索</h1><p id="target">正在读取任务…</p></div><span id="badge">初始化</span></header>
+<p id="reviewWarning" hidden style="margin:16px 24px;padding:14px;background:#7f1d1d;color:white;border-radius:10px"></p><main>
+<section class="panel"><div class="title"><strong>相机 RGB</strong><span id="frameKind">等待第一帧</span></div>
+<div class="stage"><canvas id="rgb" width="640" height="480"></canvas><div id="empty">正在初始化场景和本地模型<br>首帧将在相机实际观察后显示</div></div>
+<div class="controls"><div class="row"><button id="play">▶ 播放</button><button id="back">上一帧</button><button id="next">下一帧</button><select id="speed" aria-label="播放速度"><option value=".25">0.25×</option><option value=".5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select><span class="time" id="time">0 / 0</span></div>
+<input id="seek" type="range" min="0" max="0" value="0" aria-label="回放进度"><div class="row"><label><input id="follow" type="checkbox" checked> 跟随实时画面</label><label><input id="boxes" type="checkbox" checked> 显示本帧检测框</label></div></div>
+<div class="stats"><div class="stat"><strong id="frames">0</strong><span>运动渲染帧</span></div><div class="stat"><strong id="observations">0</strong><span>检测关键帧</span></div><div class="stat"><strong id="distance">0.00</strong><span>场景单位</span></div></div>
+<div class="links"><a id="video" href="search.mp4" hidden>下载 MP4</a><a href="visualization/manifest.json">帧与位姿记录</a><a id="report" href="index.html">搜索报告</a></div></section>
+<aside><section class="panel"><div class="title"><strong>相机路径</strong><span>● 当前　━ 已走　┄ 计划</span></div><div class="mapwrap"><canvas id="map" width="600" height="420"></canvas></div><p class="note" id="mapnote">正在准备导航地图…</p><div class="note row" id="coverageControls" hidden><label><input id="heatmap" type="checkbox" checked>覆盖热力图</label><label><input id="stations" type="checkbox" checked>观察站点</label></div><p class="note" id="coverageLegend" hidden>灰：尚未观察　黄：几何可见　绿：达到有效观察条件<br>深灰：尚无满足有效条件的采样站点视角<br>圆圈：固定站点；填充：已完成的观察方向</p><p class="note" id="coverageStats"></p><div id="pose">等待相机位姿</div></section>
+<section class="panel"><div class="title"><strong>执行状态</strong><span id="phase">初始化</span></div><ol id="events"></ol></section>
+<section class="panel"><div class="title"><strong>回放说明</strong></div><p class="note" style="padding-top:14px">运动帧来自实际到达的相机位置。检测框仅显示在调用检测器的关键帧上；黄色是未确认提议，灰色是已否定，绿色是已确认。回放按运动帧 FPS 播放，模型等待时间保留在日志中。</p><p class="note" id="mode"></p></section></aside>
+</main><footer>RGB 用于目标识别 · 已知几何用于导航与路径显示</footer>
+<script id="initial-data" type="application/json">__MANIFEST_JSON__</script>
+<script>
+'use strict';
+const initial=JSON.parse(document.getElementById('initial-data').textContent);
+const $=id=>document.getElementById(id), rgb=$('rgb'), ctx=rgb.getContext('2d'), map=$('map'), mc=map.getContext('2d');
+let state=initial.state, options=initial.options, byId=new Map(initial.frames.map(f=>[f.id,f])), frames=[],cursor=-1,index=0,playing=false,timer=null,requestId=0,lastDrawn=null,mapImage=null,mapPath=null,polling=false,online=false;
+const cache=new Map();
+function detectionColor(d){const s=d.review_status||'proposal';return s.startsWith('confirmed')?'#4ade80':s.startsWith('rejected')?'#94a3b8':'#fbbf24';}
+function detectionNote(d){const s=d.review_status||'proposal';return s.startsWith('confirmed')?'已确认':s.startsWith('rejected')?'已否定':'未确认';}
+function imageFor(path){if(cache.has(path))return cache.get(path);const im=new Image();im.src=path;cache.set(path,im);if(cache.size>24)cache.delete(cache.keys().next().value);return im;}
+function sorted(){frames=Array.from(byId.values()).sort((a,b)=>a.id-b.id);$('seek').max=Math.max(0,frames.length-1);}
+function show(i){if(!frames.length)return;index=Math.max(0,Math.min(i,frames.length-1));const f=frames[index],token=++requestId,im=imageFor(f.image);const draw=()=>{if(token!==requestId)return;rgb.width=f.camera.width;rgb.height=f.camera.height;ctx.drawImage(im,0,0,rgb.width,rgb.height);if($('boxes').checked){ctx.font='13px system-ui';ctx.lineWidth=2;for(const d of f.detections||[]){const [x1,y1,x2,y2]=d.box;ctx.strokeStyle=detectionColor(d);ctx.strokeRect(x1,y1,x2-x1,y2-y1);const text=d.label+' '+(typeof d.score==='number'?d.score.toFixed(2):'VLM')+' ['+detectionNote(d)+']',w=ctx.measureText(text).width;ctx.fillStyle='#0b1120';ctx.fillRect(x1,Math.max(0,y1-19),w+8,19);ctx.fillStyle=detectionColor(d);ctx.fillText(text,x1+4,Math.max(14,y1-5));}}$('empty').hidden=true;lastDrawn=f.id;$('seek').value=index;$('time').textContent=(f.id/(options.fps||12)).toFixed(2)+' s · '+(index+1)+' / '+frames.length;$('frameKind').textContent=f.observation_id===null?'运动帧 · '+f.state:'检测关键帧 '+f.observation_id+' · '+f.state;const c=f.camera.camera_to_world,p=c.slice(0,3).map(r=>r[3]);$('pose').textContent='xyz = ['+p.map(x=>x.toFixed(3)).join(', ')+']  |  frame '+f.id;drawMap(f);};if(im.complete&&im.naturalWidth)draw();else{im.onload=draw;im.onerror=()=>{$('empty').hidden=false;$('empty').textContent='该帧尚不可读，请检查文件或服务连接';};}if(index+1<frames.length)imageFor(frames[index+1].image);}
+function coverageAt(f){
+ const m=state.coverage_map;if(!m)return null;
+ const step=f?(f.coverage_step??-1):-1,observed=v=>v>=0&&v<=step;
+ let denom=0,effective=0,visited=0,views=0,seen=0;
+ for(let i=0;i<m.points.length;i++){if(observed(m.first_seen[i]))seen++;if(m.potential_effective[i]){denom+=m.weights[i];if(observed(m.first_effective[i]))effective+=m.weights[i];}}
+ for(const station of m.stations){const n=station.view_first_observed.filter(observed).length;views+=n;if(n)visited++;}
+ return {step,observed,seen,visited,views,fraction:denom?effective/denom:0};
+}
+function drawMap(f){
+ mc.clearRect(0,0,map.width,map.height);mc.fillStyle='#0b1120';mc.fillRect(0,0,map.width,map.height);
+ const spec=state.map;if(!spec){mc.fillStyle='#9baec8';mc.fillText('导航地图正在初始化',20,30);return;}
+ if(mapPath!==spec.image){mapPath=spec.image;mapImage=new Image();mapImage.onload=()=>drawMap(frames[index]);mapImage.src=spec.image;}
+ const [lx,ly]=spec.lower,[ux,uy]=spec.upper,pad=25,scale=Math.min((map.width-2*pad)/(ux-lx),(map.height-2*pad)/(uy-ly)),w=(ux-lx)*scale,h=(uy-ly)*scale,ox=(map.width-w)/2,oy=(map.height-h)/2;
+ const project=p=>[ox+(p[spec.axes[0]]-lx)*scale,oy+h-(p[spec.axes[1]]-ly)*scale];
+ if(mapImage&&mapImage.complete&&mapImage.naturalWidth){mc.imageSmoothingEnabled=false;mc.drawImage(mapImage,ox,oy,w,h);}
+ const c=coverageAt(f),model=state.coverage_map;$('coverageControls').hidden=$('coverageLegend').hidden=!c;
+ if(c){
+  if($('heatmap').checked){
+   // Draw unseen first, then seen/effective so projection of several heights
+   // does not hide a covered surface under an unseen one.
+   for(const layer of [3,0,1,2])for(let i=0;i<model.points.length;i++){
+    const kind=c.observed(model.first_effective[i])?2:c.observed(model.first_seen[i])?1:model.potential_effective[i]?0:3;if(kind!==layer)continue;
+    const [x,y]=project(model.points[i]);mc.fillStyle=['#64748b','#fbbf24','#22c55e','#334155'][kind];mc.globalAlpha=(kind===1||kind===2)?0.8:0.35;mc.fillRect(x-2,y-2,4,4);
+   }mc.globalAlpha=1;
+  }
+  if($('stations').checked)for(const station of model.stations){
+   const [x,y]=project(station.position),n=station.view_first_observed.filter(c.observed).length;
+   mc.beginPath();mc.arc(x,y,8,0,2*Math.PI);mc.fillStyle='#0b1120';mc.fill();mc.strokeStyle=n?'#67e8f9':'#a5b4fc';mc.lineWidth=2;mc.stroke();
+   if(n){mc.beginPath();mc.moveTo(x,y);mc.arc(x,y,6,-Math.PI/2,-Math.PI/2+2*Math.PI*n/station.view_first_observed.length);mc.closePath();mc.fillStyle='#22d3ee';mc.fill();}
+  }
+  $('coverageStats').textContent='本帧有效覆盖 '+(100*c.fraction).toFixed(1)+'% · 站点 '+c.visited+'/'+model.stations.length+' · 扫描 '+c.views+' 个方向。百分比仅针对采样可观测表面；俯视投影叠加多个高度。';
+ }else $('coverageStats').textContent='此运行未启用固定站点覆盖统计。';
+ const line=(positions,color,dashed=false)=>{if(positions.length<2)return;mc.beginPath();positions.forEach((p,i)=>{const [x,y]=project(p);i?mc.lineTo(x,y):mc.moveTo(x,y);});mc.strokeStyle=color;mc.lineWidth=3;mc.setLineDash(dashed?[6,5]:[]);mc.stroke();mc.setLineDash([]);};
+ if($('follow').checked)line(state.planned_path||[],'#fbbf24',true);
+ const until=f?f.id:Infinity;line(frames.filter(x=>x.id<=until).map(x=>x.camera.camera_to_world.slice(0,3).map(r=>r[3])),'#0284c7');
+ if(f){const pose=f.camera.camera_to_world,p=pose.slice(0,3).map(r=>r[3]),[x,y]=project(p),q=p.map((v,k)=>v+pose[k][2]*.35),[qx,qy]=project(q);mc.strokeStyle='#fb7185';mc.lineWidth=3;mc.beginPath();mc.moveTo(x,y);mc.lineTo(qx,qy);mc.stroke();mc.fillStyle='#f43f5e';mc.beginPath();mc.arc(x,y,6,0,Math.PI*2);mc.fill();}
+ $('mapnote').textContent=spec.description+' · 高度 '+spec.height.toFixed(2);
+}
+function refresh(){const final=state.complete;if(state.review_correction){$('reviewWarning').hidden=false;$('reviewWarning').textContent='历史 FOUND 已被人工反馈否定，本次不计成功：'+state.review_correction.reason;}$('target').textContent='目标：'+(state.target.description||state.target.category||state.target.detector_prompt||'轨迹回放');$('badge').textContent=state.status+' · '+(online&&!final?'实时':'回放');$('phase').textContent=state.phase+(state.grid_scan?' · 固定视角 '+state.grid_scan.completed+'/'+state.grid_scan.total:'');$('frames').textContent=state.frame_count;$('observations').textContent=state.observations;$('distance').textContent=Number(state.path_length||0).toFixed(2);$('video').hidden=!state.video;$('mode').textContent=(state.mode==='trajectory_rerender'?'这是沿保存轨迹补渲染的回放；原搜索决策和模型输出保持原记录。':state.mode==='keyframes_only'?'当前只有检测关键帧。要生成完整运动回放，请使用 replay --render-trajectory。':'录制模式：实际搜索运动。')+(state.recording_truncated?' 录制达到容量上限，视频并未覆盖后续全部运动。':'')+(state.video_error?' MP4 导出失败，可查看 visualization/video_error.json。':'');$('events').replaceChildren(...(state.events||[]).slice(-12).map(e=>{const li=document.createElement('li');li.textContent=(e.elapsed_seconds===undefined?'':e.elapsed_seconds.toFixed(1)+'s  ')+(e.phase||e.state||e.kind)+(e.reason?' · '+e.reason:'');return li;}));$('events').scrollTop=$('events').scrollHeight;$('report').hidden=state.mode==='trajectory_rerender';if(!frames.length)drawMap(null);}
+function stop(){playing=false;clearTimeout(timer);$('play').textContent='▶ 播放';}
+function tick(){if(!playing)return;if(index>=frames.length-1){stop();return;}show(index+1);timer=setTimeout(tick,1000/((options.fps||12)*Number($('speed').value)));}
+$('play').onclick=()=>{if(playing){stop();return;}$('follow').checked=false;if(index>=frames.length-1)index=-1;playing=true;$('play').textContent='Ⅱ 暂停';tick();};
+$('back').onclick=()=>{stop();$('follow').checked=false;show(index-1);};$('next').onclick=()=>{stop();$('follow').checked=false;show(index+1);};$('seek').oninput=()=>{stop();$('follow').checked=false;show(Number($('seek').value));};$('boxes').onchange=()=>show(index);$('heatmap').onchange=$('stations').onchange=()=>drawMap(frames[index]);$('follow').onchange=()=>{stop();if($('follow').checked)show(frames.length-1);};
+async function poll(){if(polling)return;polling=true;try{const response=await fetch('api/state?after='+cursor,{cache:'no-store'});if(!response.ok)throw Error(response.status);const data=await response.json();online=true;state=data.state;options=data.options;for(const f of data.frames){byId.set(f.id,f);cursor=Math.max(cursor,f.id);}if(data.latest)byId.set(data.latest.id,data.latest);sorted();refresh();if($('follow').checked)show(frames.length-1);else if(data.latest&&lastDrawn===data.latest.id)show(index);}catch(e){online=false;$('badge').textContent=state.status+' · 本地回放';}finally{polling=false;}}
+sorted();cursor=frames.length?frames[frames.length-1].id:-1;refresh();if(frames.length){$('follow').checked=false;show(0);}if(location.protocol==='http:'||location.protocol==='https:'){if(!state.complete)$('follow').checked=true;poll();setInterval(poll,Math.max(33,1000/(options.fps||12)));}else{$('follow').checked=false;}
+window.gsViewerTest=()=>({loaded:frames.length,index,state:state.status,lastDrawn,playing,coverage:JSON.parse(JSON.stringify(coverageAt(frames[index]))),coverageText:$('coverageStats').textContent});
+</script>
+</html>
